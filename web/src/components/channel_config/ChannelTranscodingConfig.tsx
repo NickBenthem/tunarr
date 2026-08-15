@@ -18,7 +18,18 @@ import {
 import Box from '@mui/material/Box';
 import Grid from '@mui/material/Grid';
 import Typography from '@mui/material/Typography';
-import { isNonEmptyString } from '@tunarr/shared/util';
+import {
+  DefaultProgramTitleTemplate,
+  isNonEmptyString,
+  MaxProgramTitleLines,
+  programTitleLineCount,
+  programTitleOverlayHeight,
+  renderProgramTitleTemplate,
+  ProgramTitleOverlayFontSize,
+  ProgramTitleOverlayLineHeight,
+  ProgramTitleOverlayWidth,
+  type ProgramTitleTemplateToken,
+} from '@tunarr/shared/util';
 import type { ChannelStreamMode, Watermark } from '@tunarr/types';
 import { find, map, range, round } from 'lodash-es';
 import { useMemo, useState } from 'react';
@@ -49,10 +60,8 @@ const watermarkSourceOptions: {
   value: NonNullable<Watermark['source']>;
 }[] = [{ value: 'image' }, { value: 'program-title' }];
 
-const DefaultProgramTitleTemplate = '{show} · {seasonEpisode} · {title}';
-
 function renderProgramTitlePreview(template?: string): string {
-  const values: Record<string, string> = {
+  const values: Record<ProgramTitleTemplateToken, string> = {
     album: 'Songs in the Key of Springfield',
     artist: 'The Simpsons',
     episode: 'E02',
@@ -62,19 +71,10 @@ function renderProgramTitlePreview(template?: string): string {
     title: 'You Only Move Twice',
   };
 
-  return (
-    isNonEmptyString(template?.trim()) ? template : DefaultProgramTitleTemplate
-  )
-    .replace(
-      /\{(album|artist|episode|season|seasonEpisode|show|title)\}/g,
-      (_, token: string) => values[token] ?? '',
-    )
-    .split('·')
-    .map((part) => part.trim())
-    .filter(isNonEmptyString)
-    .join(' · ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return renderProgramTitleTemplate(
+    isNonEmptyString(template?.trim()) ? template : DefaultProgramTitleTemplate,
+    values,
+  );
 }
 
 const ChannelStreamModeOptions: {
@@ -157,6 +157,9 @@ export default function ChannelTranscodingConfig() {
   const programTitlePreview = renderProgramTitlePreview(
     watermark?.programTitleTemplate,
   );
+  const programTitleOverlayAspectRatio = `${ProgramTitleOverlayWidth} / ${programTitleOverlayHeight(
+    programTitleLineCount(programTitlePreview),
+  )}`;
 
   return (
     channel && (
@@ -296,7 +299,7 @@ export default function ChannelTranscodingConfig() {
             />
             <FormHelperText>
               <Trans>
-                Renders an image or the current program title on top of the
+                Renders an image or the current program's metadata on top of the
                 channel's stream.
               </Trans>
             </FormHelperText>
@@ -319,28 +322,43 @@ export default function ChannelTranscodingConfig() {
                     }}
                   >
                     {watermarkSource === 'program-title' ? (
-                      <Typography
+                      <Box
                         sx={{
-                          color: 'white',
-                          fontSize: 'clamp(8px, 1.35vw, 18px)',
-                          fontWeight: 700,
-                          lineHeight: 1,
-                          maxWidth: `${watermark?.width ?? 75}%`,
+                          aspectRatio: programTitleOverlayAspectRatio,
+                          containerType: 'inline-size',
                           opacity: opacity ? opacity / 100 : 1.0,
                           overflow: 'hidden',
                           position: 'absolute',
-                          textOverflow: 'ellipsis',
-                          textShadow:
-                            '-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000',
-                          whiteSpace: 'nowrap',
+                          width: `${watermark?.width ?? 75}%`,
                           [isBottom ? 'bottom' : 'top']:
                             `${watermark?.verticalMargin}%`,
                           [isRight ? 'right' : 'left']:
                             `${watermark?.horizontalMargin}%`,
                         }}
                       >
-                        {programTitlePreview}
-                      </Typography>
+                        <Typography
+                          component="div"
+                          sx={{
+                            color: 'white',
+                            fontSize: `${
+                              (100 * ProgramTitleOverlayFontSize) /
+                              ProgramTitleOverlayWidth
+                            }cqw`,
+                            fontWeight: 400,
+                            left: '0.5%',
+                            lineHeight:
+                              ProgramTitleOverlayLineHeight /
+                              ProgramTitleOverlayFontSize,
+                            position: 'absolute',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            WebkitTextStroke: 'max(0.5px, 0.1875cqw) black',
+                            whiteSpace: 'pre',
+                          }}
+                        >
+                          {programTitlePreview}
+                        </Typography>
+                      </Box>
                     ) : (
                       <Box
                         component="img"
@@ -442,7 +460,7 @@ export default function ChannelTranscodingConfig() {
                               <MenuItem key={option.value} value={option.value}>
                                 {option.value === 'image'
                                   ? t`Image`
-                                  : t`Current program title`}
+                                  : t`Now playing`}
                               </MenuItem>
                             ))}
                           </Select>
@@ -450,8 +468,8 @@ export default function ChannelTranscodingConfig() {
                       />
                       <FormHelperText>
                         <Trans>
-                          Program titles use each item's metadata and restart at
-                          every program cutover.
+                          Now playing overlays draw the current program's
+                          metadata and restart at every program cutover.
                         </Trans>
                       </FormHelperText>
                     </FormControl>
@@ -465,7 +483,9 @@ export default function ChannelTranscodingConfig() {
                           <TextField
                             {...field}
                             fullWidth
-                            label={t`Title format`}
+                            multiline
+                            minRows={2}
+                            label={t`Now playing format`}
                             placeholder={DefaultProgramTitleTemplate}
                             slotProps={{ htmlInput: { maxLength: 500 } }}
                             value={field.value ?? ''}
@@ -481,8 +501,10 @@ export default function ChannelTranscodingConfig() {
                                 <code>{'{album}'}</code>.
                                 <br />
                                 <Trans>
-                                  Leave blank to format each program type
-                                  automatically.
+                                  Press Enter or use <code>\n</code> to draw the
+                                  title on multiple lines (up to{' '}
+                                  {MaxProgramTitleLines}). The overlay grows
+                                  taller with each line.
                                 </Trans>
                               </>
                             }
