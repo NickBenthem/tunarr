@@ -7,6 +7,7 @@ import { ChannelIconSchema, ContentProgramTypeSchema } from './utilSchemas.js';
 
 export const WatermarkSchema = z.object({
   source: z.enum(['image', 'program-title']).optional().catch(undefined),
+  programTitleTemplate: z.string().max(500).optional().catch(undefined),
   url: z.string().optional(),
   enabled: z.boolean(),
   position: z

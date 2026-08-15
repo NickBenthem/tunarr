@@ -57,6 +57,7 @@ function getDefaultFormValues(channel: Channel): DeepRequired<SaveableChannel> {
     watermark: {
       ...(channel.watermark ?? {}),
       source: channel.watermark?.source ?? 'image',
+      programTitleTemplate: channel.watermark?.programTitleTemplate ?? '',
       enabled: channel.watermark?.enabled ?? false,
       url: channel.watermark?.url ?? '',
       width: channel.watermark?.width ?? 10,
@@ -204,6 +205,11 @@ export function EditChannelForm({
         ? {
             ...data.watermark,
             enabled: !!data.watermark.enabled,
+            programTitleTemplate: isNonEmptyString(
+              data.watermark.programTitleTemplate?.trim(),
+            )
+              ? data.watermark.programTitleTemplate.trim()
+              : undefined,
             fadeConfig: isEmpty(fadeConfigs) ? undefined : fadeConfigs,
           }
         : undefined,

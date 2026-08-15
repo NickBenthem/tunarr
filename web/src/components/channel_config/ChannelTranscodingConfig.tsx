@@ -13,6 +13,7 @@ import {
   Slider,
   Stack,
   Switch,
+  TextField,
 } from '@mui/material';
 import Box from '@mui/material/Box';
 import Grid from '@mui/material/Grid';
@@ -46,11 +47,35 @@ const watermarkPositionOptions: {
 
 const watermarkSourceOptions: {
   value: NonNullable<Watermark['source']>;
-  label: string;
-}[] = [
-  { value: 'image', label: 'Image' },
-  { value: 'program-title', label: 'Current program title' },
-];
+}[] = [{ value: 'image' }, { value: 'program-title' }];
+
+const DefaultProgramTitleTemplate = '{show} · {seasonEpisode} · {title}';
+
+function renderProgramTitlePreview(template?: string): string {
+  const values: Record<string, string> = {
+    album: 'Songs in the Key of Springfield',
+    artist: 'The Simpsons',
+    episode: 'E02',
+    season: 'S08',
+    seasonEpisode: 'S08E02',
+    show: 'The Simpsons',
+    title: 'You Only Move Twice',
+  };
+
+  return (
+    isNonEmptyString(template?.trim()) ? template : DefaultProgramTitleTemplate
+  )
+    .replace(
+      /\{(album|artist|episode|season|seasonEpisode|show|title)\}/g,
+      (_, token: string) => values[token] ?? '',
+    )
+    .split('·')
+    .map((part) => part.trim())
+    .filter(isNonEmptyString)
+    .join(' · ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 const ChannelStreamModeOptions: {
   value: ChannelStreamMode;
@@ -129,6 +154,9 @@ export default function ChannelTranscodingConfig() {
     watermark?.position === 'bottom-right';
   const watermarkPath = watch('watermark.url');
   const watermarkSource = watermark?.source ?? 'image';
+  const programTitlePreview = renderProgramTitlePreview(
+    watermark?.programTitleTemplate,
+  );
 
   return (
     channel && (
@@ -311,7 +339,7 @@ export default function ChannelTranscodingConfig() {
                             `${watermark?.horizontalMargin}%`,
                         }}
                       >
-                        The Simpsons · S08E02 · You Only Move Twice
+                        {programTitlePreview}
                       </Typography>
                     ) : (
                       <Box
@@ -412,7 +440,9 @@ export default function ChannelTranscodingConfig() {
                           >
                             {watermarkSourceOptions.map((option) => (
                               <MenuItem key={option.value} value={option.value}>
-                                {option.label}
+                                {option.value === 'image'
+                                  ? t`Image`
+                                  : t`Current program title`}
                               </MenuItem>
                             ))}
                           </Select>
@@ -426,6 +456,41 @@ export default function ChannelTranscodingConfig() {
                       </FormHelperText>
                     </FormControl>
                   </Grid>
+                  {watermarkSource === 'program-title' && (
+                    <Grid size={{ xs: 12 }}>
+                      <Controller
+                        name="watermark.programTitleTemplate"
+                        control={control}
+                        render={({ field }) => (
+                          <TextField
+                            {...field}
+                            fullWidth
+                            label={t`Title format`}
+                            placeholder={DefaultProgramTitleTemplate}
+                            slotProps={{ htmlInput: { maxLength: 500 } }}
+                            value={field.value ?? ''}
+                            helperText={
+                              <>
+                                <Trans>Available tokens:</Trans>{' '}
+                                <code>{'{show}'}</code>,{' '}
+                                <code>{'{season}'}</code>,{' '}
+                                <code>{'{episode}'}</code>,{' '}
+                                <code>{'{seasonEpisode}'}</code>,{' '}
+                                <code>{'{title}'}</code>,{' '}
+                                <code>{'{artist}'}</code>,{' '}
+                                <code>{'{album}'}</code>.
+                                <br />
+                                <Trans>
+                                  Leave blank to format each program type
+                                  automatically.
+                                </Trans>
+                              </>
+                            }
+                          />
+                        )}
+                      />
+                    </Grid>
+                  )}
                   {watermarkSource === 'image' && (
                     <Grid size={{ xs: 12 }}>
                       <Controller
