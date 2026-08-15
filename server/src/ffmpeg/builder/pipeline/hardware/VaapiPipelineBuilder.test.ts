@@ -1,5 +1,6 @@
 import { ColorFormat } from '@/ffmpeg/builder/format/ColorFormat.js';
 import { TONEMAP_ENABLED, TUNARR_ENV_VARS } from '@/util/env.js';
+import type { Watermark } from '@tunarr/types';
 import { FileStreamSource } from '../../../../stream/types.ts';
 import {
   EmptyFfmpegCapabilities,
@@ -539,6 +540,7 @@ describe('VaapiPipelineBuilder pad', () => {
     disableHardwareDecoding?: boolean;
     disableHardwareEncoding?: boolean;
     watermarkStream?: StillImageStream;
+    watermark?: Partial<Watermark>;
   }) {
     const capabilities = new VaapiHardwareCapabilities([
       new VaapiProfileEntrypoint(
@@ -556,7 +558,7 @@ describe('VaapiPipelineBuilder pad', () => {
       new FfmpegCapabilities(
         new Set(),
         new Map(),
-        new Set([KnownFfmpegFilters.PadVaapi]),
+        new Set([KnownFfmpegFilters.PadVaapi, KnownFfmpegFilters.OverlayVaapi]),
         new Set(),
       );
 
@@ -578,6 +580,7 @@ describe('VaapiPipelineBuilder pad', () => {
           position: 'top-left',
           verticalMargin: 0,
           width: 100,
+          ...opts.watermark,
         },
       );
     }
@@ -773,7 +776,7 @@ describe('VaapiPipelineBuilder pad', () => {
     expect(args).not.toContain('pad=');
   });
 
-  test('hardware download after pad_vaapi with watermark', () => {
+  test('keeps frames on hardware for a VAAPI watermark overlay', () => {
     const pipeline = buildWithPad({
       videoStream: VideoStream.create({
         index: 0,
@@ -792,18 +795,59 @@ describe('VaapiPipelineBuilder pad', () => {
     });
 
     const args = pipeline.getCommandArgs().join(' ');
-    // pad_vaapi must be present
-    expect(args).toContain('pad_vaapi');
-    // hwdownload must appear after pad_vaapi (before the software overlay)
+    expect(args).toContain('overlay_vaapi');
+    expect(args).not.toContain('hwdownload');
+  });
+
+  test('keeps a finite-duration watermark on the hardware overlay path', () => {
+    const pipeline = buildWithPad({
+      videoStream: create169FhdVideoStream(),
+      watermarkStream: StillImageStream.create({
+        frameSize: FrameSize.withDimensions(100, 100),
+        index: 0,
+      }),
+      watermark: { duration: 5 },
+    });
+
+    const args = pipeline.getCommandArgs().join(' ');
+    expect(args).toContain('overlay_vaapi');
+    expect(args).not.toContain('hwdownload');
+  });
+
+  test('falls back to software overlay when overlay_vaapi is unavailable', () => {
+    const pipeline = buildWithPad({
+      videoStream: create43VideoStream(),
+      binaryCapabilities: new FfmpegCapabilities(
+        new Set(),
+        new Map(),
+        new Set([KnownFfmpegFilters.PadVaapi]),
+        new Set(),
+      ),
+      watermarkStream: StillImageStream.create({
+        frameSize: FrameSize.withDimensions(100, 100),
+        index: 0,
+      }),
+      watermark: { duration: 5 },
+    });
+
+    const args = pipeline.getCommandArgs().join(' ');
     expect(args).toContain('hwdownload');
-    const padIdx = args.indexOf('pad_vaapi');
-    const dlIdx = args.indexOf('hwdownload');
-    expect(dlIdx).toBeGreaterThan(padIdx);
-    // any second hwupload (to re-enter hw for encoding) must come AFTER hwdownload
-    const secondHwuploadIdx = args.indexOf('hwupload', dlIdx);
-    if (secondHwuploadIdx !== -1) {
-      expect(secondHwuploadIdx).toBeGreaterThan(dlIdx);
-    }
+    expect(args).not.toContain('overlay_vaapi');
+  });
+
+  test('falls back to software overlay for animated watermarks', () => {
+    const pipeline = buildWithPad({
+      videoStream: create43VideoStream(),
+      watermarkStream: StillImageStream.create({
+        frameSize: FrameSize.withDimensions(100, 100),
+        index: 0,
+      }),
+      watermark: { animated: true },
+    });
+
+    const args = pipeline.getCommandArgs().join(' ');
+    expect(args).toContain('hwdownload');
+    expect(args).not.toContain('overlay_vaapi');
   });
 });
 
