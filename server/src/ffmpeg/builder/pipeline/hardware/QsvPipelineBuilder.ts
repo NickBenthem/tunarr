@@ -16,6 +16,7 @@ import { QsvFormatFilter } from '@/ffmpeg/builder/filter/qsv/QsvFormatFilter.js'
 import { ScaleQsvFilter } from '@/ffmpeg/builder/filter/qsv/ScaleQsvFilter.js';
 import { OverlayWatermarkQsvFilter } from '@/ffmpeg/builder/filter/qsv/OverlayWatermarkQsvFilter.js';
 import { OverlayWatermarkFilter } from '@/ffmpeg/builder/filter/watermark/OverlayWatermarkFilter.js';
+import { WatermarkBoundsFilter } from '@/ffmpeg/builder/filter/watermark/WatermarkBoundsFilter.js';
 import { WatermarkHideAfterFilter } from '@/ffmpeg/builder/filter/watermark/WatermarkHideAfterFilter.js';
 import { WatermarkOpacityFilter } from '@/ffmpeg/builder/filter/watermark/WatermarkOpacityFilter.js';
 import { WatermarkScaleFilter } from '@/ffmpeg/builder/filter/watermark/WatermarkScaleFilter.js';
@@ -545,6 +546,15 @@ export class QsvPipelineBuilder extends SoftwarePipelineBuilder {
     );
 
     if (useHardwareOverlay) {
+      const { width, height } = this.desiredState.paddedSize;
+      const { horizontalMargin, verticalMargin } = watermarkInput.watermark;
+      watermarkInput.filterSteps.push(
+        new WatermarkBoundsFilter(
+          width - Math.round((horizontalMargin / 100) * width),
+          height - Math.round((verticalMargin / 100) * height),
+        ),
+      );
+
       // QSV represents packed RGB overlays as RGB4 (bgra on the FFmpeg side).
       watermarkInput.filterSteps.push(
         new PixelFormatFilter(new PixelFormatBgra()),
