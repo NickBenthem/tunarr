@@ -1516,4 +1516,34 @@ describe('QsvPipelineBuilder hardware watermark overlay', () => {
     expect(args).not.toContain('overlay_qsv');
     expect(args).toContain('hwdownload');
   });
+
+  test('falls back to the software overlay for multi-frame watermark inputs', () => {
+    const watermark = new WatermarkInputSource(
+      new FileStreamSource('/path/to/watermark.mp4'),
+      VideoStream.create({
+        codec: VideoFormats.H264,
+        colorFormat: ColorFormat.unknown,
+        displayAspectRatio: '1:1',
+        frameSize: FrameSize.withDimensions(100, 100),
+        index: 1,
+        inputKind: 'video',
+        pixelFormat: new PixelFormatYuv420P(),
+        providedSampleAspectRatio: '1:1',
+      }),
+      {
+        duration: 0,
+        enabled: true,
+        horizontalMargin: 5,
+        opacity: 100,
+        position: 'bottom-right',
+        verticalMargin: 5,
+        width: 10,
+      } satisfies Watermark,
+    );
+
+    const args = buildWithOverlay({ watermark }).getCommandArgs().join(' ');
+
+    expect(args).not.toContain('overlay_qsv');
+    expect(args).toContain('hwdownload');
+  });
 });

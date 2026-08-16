@@ -884,6 +884,26 @@ describe('VaapiPipelineBuilder pad', () => {
     expect(args).toContain('hwdownload');
     expect(args).not.toContain('overlay_vaapi');
   });
+
+  test('falls back to software overlay for multi-frame watermark inputs', () => {
+    const pipeline = buildWithPad({
+      videoStream: create43VideoStream(),
+      watermarkStream: VideoStream.create({
+        codec: VideoFormats.H264,
+        colorFormat: null,
+        displayAspectRatio: '1:1',
+        frameSize: FrameSize.withDimensions(100, 100),
+        index: 0,
+        inputKind: 'video',
+        pixelFormat: new PixelFormatYuv420P(),
+        providedSampleAspectRatio: '1:1',
+      }),
+    });
+
+    const args = pipeline.getCommandArgs().join(' ');
+    expect(args).toContain('hwdownload');
+    expect(args).not.toContain('overlay_vaapi');
+  });
 });
 
 describe('VaapiPipelineBuilder tonemap', () => {
