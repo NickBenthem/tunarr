@@ -3,7 +3,10 @@ import dayjs from 'dayjs';
 import { StrictOmit } from 'ts-essentials';
 import { FileStreamSource } from '../../../../stream/types.ts';
 import { TUNARR_ENV_VARS } from '../../../../util/env.ts';
-import { EmptyFfmpegCapabilities } from '../../capabilities/FfmpegCapabilities.ts';
+import {
+  EmptyFfmpegCapabilities,
+  FfmpegCapabilities,
+} from '../../capabilities/FfmpegCapabilities.ts';
 import {
   VaapiEntrypoint,
   VaapiHardwareCapabilities,
@@ -31,6 +34,8 @@ import {
   PixelFormatYuv420P10Le,
 } from '../../format/PixelFormat.ts';
 import { LavfiVideoInputSource } from '../../input/LavfiVideoInputSource.ts';
+import { KnownFfmpegFilters } from '../../options/KnownFfmpegOptions.ts';
+import { WatermarkHideAfterFilter } from '../../filter/watermark/WatermarkHideAfterFilter.ts';
 import { SubtitlesInputSource } from '../../input/SubtitlesInputSource.ts';
 import { VideoInputSource } from '../../input/VideoInputSource.ts';
 import { WatermarkInputSource } from '../../input/WatermarkInputSource.ts';
@@ -169,12 +174,13 @@ function buildPipeline(opts: {
   videoInput?: VideoInputSource;
   watermark?: WatermarkInputSource | null;
   capabilities?: VaapiHardwareCapabilities;
+  binaryCapabilities?: FfmpegCapabilities;
   pipelineOptions?: Partial<PipelineOptions>;
 }) {
   const video = opts.videoInput ?? makeH264VideoInput();
   const builder = new QsvPipelineBuilder(
     opts.capabilities ?? fullCapabilities,
-    EmptyFfmpegCapabilities,
+    opts.binaryCapabilities ?? EmptyFfmpegCapabilities,
     video,
     null,
     null,
@@ -1413,5 +1419,101 @@ describe('QsvPipelineBuilder', () => {
       },
     );
     console.log(x.getCommandArgs().join(' '));
+  });
+});
+
+describe('QsvPipelineBuilder hardware watermark overlay', () => {
+  const overlayQsvCapabilities = new FfmpegCapabilities(
+    new Set(),
+    new Map(),
+    new Set([KnownFfmpegFilters.OverlayQsv]),
+    new Set(),
+  );
+
+  function buildWithOverlay(opts: {
+    watermark?: WatermarkInputSource | null;
+    binaryCapabilities?: FfmpegCapabilities;
+    pipelineOptions?: Partial<PipelineOptions>;
+  }) {
+    return buildPipeline({
+      // SAR 1:1 HEVC keeps the frame on hardware through decode, so the
+      // watermark step is reached without an intervening scale/pad download.
+      videoInput: makeHevcVideoInput(),
+      watermark: opts.watermark ?? makeWatermarkSource(),
+      binaryCapabilities: opts.binaryCapabilities ?? overlayQsvCapabilities,
+      pipelineOptions: opts.pipelineOptions,
+    });
+  }
+
+  test('composites on the GPU when overlay_qsv is available', () => {
+    const args = buildWithOverlay({}).getCommandArgs().join(' ');
+
+    expect(args).toContain('overlay_qsv');
+    expect(args).not.toContain('hwdownload');
+  });
+
+
+  test('formats and uploads the watermark before compositing', () => {
+    const watermark = makeWatermarkSource({ duration: 5 });
+    buildWithOverlay({ watermark });
+
+    const steps = watermark.filterSteps;
+    const formatIdx = steps.findIndex((f) => f instanceof PixelFormatFilter);
+    const hideIdx = steps.findIndex(
+      (f) => f instanceof WatermarkHideAfterFilter,
+    );
+    const uploadIdx = steps.findIndex(
+      (f) => f instanceof HardwareUploadQsvFilter,
+    );
+
+    expect(formatIdx).toBeGreaterThan(-1);
+    expect(formatIdx).toBeLessThan(hideIdx);
+    expect(hideIdx).toBeLessThan(uploadIdx);
+  });
+
+  test('hides a finite-duration watermark without trimming its input', () => {
+    const args = buildWithOverlay({
+      watermark: makeWatermarkSource({ duration: 5 }),
+    })
+      .getCommandArgs()
+      .join(' ');
+
+    expect(args).toContain('colorchannelmixer');
+    expect(args).not.toContain('trim=duration');
+    expect(args).not.toContain('hwdownload');
+  });
+
+  test('falls back to the software overlay when overlay_qsv is unavailable', () => {
+    const args = buildWithOverlay({
+      binaryCapabilities: EmptyFfmpegCapabilities,
+      watermark: makeWatermarkSource({ duration: 5 }),
+    })
+      .getCommandArgs()
+      .join(' ');
+
+    expect(args).not.toContain('overlay_qsv');
+    expect(args).toContain('hwdownload');
+  });
+
+  test('falls back to the software overlay for animated watermarks', () => {
+    const args = buildWithOverlay({
+      watermark: makeWatermarkSource({ animated: true }),
+    })
+      .getCommandArgs()
+      .join(' ');
+
+    expect(args).not.toContain('overlay_qsv');
+    expect(args).toContain('hwdownload');
+  });
+
+  test('falls back to the software overlay when hardware filters are disabled', () => {
+    const args = buildWithOverlay({
+      pipelineOptions: { disableHardwareFilters: true },
+    })
+      .getCommandArgs()
+      .join(' ');
+
+    expect(args).not.toContain('overlay_qsv');
+    expect(args).toContain('hwdownload');
   });
 });

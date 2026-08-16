@@ -10,6 +10,7 @@ export default defineConfig({
   },
   test: {
     name: '@tunarr/server#integration',
+    globalSetup: ['src/testing/ffmpeg/hardwareReportSetup.ts'],
     globals: true,
     watch: false,
     include: ['src/**/*.local.test.ts'],
