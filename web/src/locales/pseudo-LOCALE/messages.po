@@ -588,7 +588,7 @@ msgstr ""
 msgid "Audio & Subtitle Options"
 msgstr ""
 
-#: src/components/channel_config/ChannelTranscodingConfig.tsx:200
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:246
 msgid "Audio & Subtitles"
 msgstr ""
 
@@ -656,6 +656,10 @@ msgstr ""
 
 #: src/components/programming_controls/AdjustWeightsModal.tsx:29
 msgid "Automatic"
+msgstr ""
+
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:494
+msgid "Available tokens:"
 msgstr ""
 
 #: src/pages/welcome/WelcomePage.tsx:231
@@ -872,13 +876,13 @@ msgstr ""
 msgid "Channel settings saved!"
 msgstr ""
 
-#: src/components/channel_config/ChannelTranscodingConfig.tsx:136
-#: src/components/channel_config/ChannelTranscodingConfig.tsx:142
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:179
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:185
 msgid "Channel Stream Mode"
 msgstr ""
 
-#: src/components/channel_config/ChannelTranscodingConfig.tsx:170
-#: src/components/channel_config/ChannelTranscodingConfig.tsx:175
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:213
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:219
 msgid "Channel Transcode Config"
 msgstr ""
 
@@ -903,7 +907,7 @@ msgstr ""
 msgid "Check"
 msgstr ""
 
-#: src/components/channel_config/ChannelTranscodingConfig.tsx:185
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:231
 msgid "Choose the transcode configuration to use for this channel. Configure transcode configurations on the <0>FFmpeg settings page</0>."
 msgstr ""
 
@@ -975,7 +979,7 @@ msgstr ""
 msgid "Configure preferred audio languages globally."
 msgstr ""
 
-#: src/components/channel_config/ChannelTranscodingConfig.tsx:224
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:272
 msgid "Configure subtitle preferences. Preferences are evaluated in order of priority. The first matching subtitle stream on a program will be used."
 msgstr ""
 
@@ -1103,6 +1107,10 @@ msgstr ""
 #: src/components/smart_collections/CreateSmartCollectionDialog.tsx:147
 msgid "Creates a new collection"
 msgstr ""
+
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:463
+#~ msgid "Current program title"
+#~ msgstr ""
 
 #: src/components/guide/TvGuide.tsx:207
 msgid "Custom Program"
@@ -1307,7 +1315,7 @@ msgstr ""
 msgid "Disable Hardware Filters"
 msgstr ""
 
-#: src/components/channel_config/ChannelTranscodingConfig.tsx:447
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:634
 msgid "Disable Image Scaling"
 msgstr ""
 
@@ -1325,7 +1333,7 @@ msgstr ""
 msgid "Dismiss"
 msgstr ""
 
-#: src/components/channel_config/ChannelTranscodingConfig.tsx:499
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:693
 msgid "Display Watermark on Leading Edge"
 msgstr ""
 
@@ -1501,7 +1509,7 @@ msgstr ""
 msgid "Enable <0>EBU R 128</0> loudness normalization via the <1>loudnorm</1> FFmpeg filter. May increase CPU usage during streaming."
 msgstr ""
 
-#: src/components/channel_config/ChannelTranscodingConfig.tsx:463
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:655
 msgid "Enable Animation"
 msgstr ""
 
@@ -1521,7 +1529,7 @@ msgstr ""
 msgid "Enable ffmpeg logging to different sinks. Outputting to a file will create a new log file for every spawned ffmpeg process in the Tunarr log directory. These files are automatically cleaned up by a background process."
 msgstr ""
 
-#: src/components/channel_config/ChannelTranscodingConfig.tsx:466
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:658
 msgid "Enable if the watermark is an animated GIF or PNG. The watermark will loop according to the image's configuration. If this option is enabled and the image is not animated, there will be playback errors."
 msgstr ""
 
@@ -1541,11 +1549,11 @@ msgstr ""
 msgid "Enable SSDP server"
 msgstr ""
 
-#: src/components/channel_config/ChannelTranscodingConfig.tsx:207
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:255
 msgid "Enable Subtitles"
 msgstr ""
 
-#: src/components/channel_config/ChannelTranscodingConfig.tsx:248
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:298
 msgid "Enable Watermark"
 msgstr ""
 
@@ -1598,7 +1606,7 @@ msgstr ""
 msgid "Enter your Jellyfin password to generate a new access token.<0/><1>NOTE:</1> These are never saved to the Tunarr DB. Instead they are sent to Jellyfin to exchange for a session token."
 msgstr ""
 
-#: src/components/channel_config/EditChannelForm.tsx:247
+#: src/components/channel_config/EditChannelForm.tsx:254
 msgid "EPG"
 msgstr ""
 
@@ -1934,7 +1942,7 @@ msgstr ""
 
 #: src/components/channel_config/AddProgrammingButton.tsx:68
 #: src/components/channel_config/ChannelProgrammingDeleteOptions.tsx:47
-#: src/components/channel_config/EditChannelForm.tsx:246
+#: src/components/channel_config/EditChannelForm.tsx:253
 #: src/hooks/programming_controls/useSlotProgramOptions.ts:111
 #: src/hooks/programming_controls/useSlotProgramOptions.ts:115
 #: src/hooks/slot_scheduler/useSlotName.ts:21
@@ -2117,6 +2125,7 @@ msgid "If you proceed, all unsaved changes will be lost. Are you sure you want t
 msgstr ""
 
 #: src/components/channel_config/ChannelFlexConfig.tsx:427
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:462
 msgid "Image"
 msgstr ""
 
@@ -2227,7 +2236,11 @@ msgstr ""
 msgid "Lazy"
 msgstr ""
 
-#: src/components/channel_config/ChannelTranscodingConfig.tsx:353
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:510
+#~ msgid "Leave blank to format each program type automatically."
+#~ msgstr ""
+
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:534
 msgid "Leave blank to use the channel's icon."
 msgstr ""
 
@@ -2721,6 +2734,18 @@ msgstr ""
 msgid "Not found!"
 msgstr ""
 
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:463
+msgid "Now playing"
+msgstr ""
+
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:488
+msgid "Now playing format"
+msgstr ""
+
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:470
+msgid "Now playing overlays draw the current program's metadata and restart at every program cutover."
+msgstr ""
+
 #: src/components/channels/ChannelNowPlayingCard.tsx:208
 msgid "Now Playing:"
 msgstr ""
@@ -2758,7 +2783,7 @@ msgstr ""
 msgid "Oops!"
 msgstr ""
 
-#: src/components/channel_config/ChannelTranscodingConfig.tsx:415
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:600
 msgid "Opacity"
 msgstr ""
 
@@ -2821,7 +2846,12 @@ msgstr ""
 msgid "Overflow Behavior"
 msgstr ""
 
-#: src/components/channel_config/ChannelTranscodingConfig.tsx:203
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:428
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:434
+msgid "Overlay source"
+msgstr ""
+
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:249
 msgid "Override global audio and subtitle settings for this channel."
 msgstr ""
 
@@ -2930,8 +2960,8 @@ msgstr ""
 msgid "Plex (Manual)"
 msgstr ""
 
-#: src/components/channel_config/ChannelTranscodingConfig.tsx:361
-#: src/components/channel_config/ChannelTranscodingConfig.tsx:366
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:545
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:550
 msgid "Position"
 msgstr ""
 
@@ -2945,6 +2975,10 @@ msgstr ""
 
 #: src/components/slot_scheduler/RandomSlotPresetButton.tsx:48
 msgid "Presets"
+msgstr ""
+
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:503
+msgid "Press Enter or use <0>\\n</0> to draw the title on multiple lines (up to {MaxProgramTitleLines}). The overlay grows taller with each line."
 msgstr ""
 
 #: src/components/channel_config/ChannelSubtitlePreferencesTable.tsx:31
@@ -2980,6 +3014,10 @@ msgstr ""
 #: src/pages/system/TroubleshootPage.tsx:268
 msgid "Program Playback Troubleshooter"
 msgstr ""
+
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:470
+#~ msgid "Program titles use each item's metadata and restart at every program cutover."
+#~ msgstr ""
 
 #: src/components/custom-shows/EditCustomShowForm.tsx:420
 #: src/components/filler/EditFillerListForm.tsx:152
@@ -3026,7 +3064,7 @@ msgstr ""
 msgid "Programs Too Long"
 msgstr ""
 
-#: src/components/channel_config/EditChannelForm.tsx:245
+#: src/components/channel_config/EditChannelForm.tsx:252
 msgid "Properties"
 msgstr ""
 
@@ -3192,7 +3230,15 @@ msgid "Removing overrun programs from the channel."
 msgstr ""
 
 #: src/components/channel_config/ChannelTranscodingConfig.tsx:251
-msgid "Renders a channel icon (also known as bug or Digital On-screen Graphic) on top of the channel's stream."
+#~ msgid "Renders a channel icon (also known as bug or Digital On-screen Graphic) on top of the channel's stream."
+#~ msgstr ""
+
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:301
+#~ msgid "Renders an image or the current program title on top of the channel's stream."
+#~ msgstr ""
+
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:301
+msgid "Renders an image or the current program's metadata on top of the channel's stream."
 msgstr ""
 
 #: src/components/programming_controls/AddRerunBlockModal.tsx:70
@@ -3706,7 +3752,7 @@ msgstr ""
 msgid "Stream Selection"
 msgstr ""
 
-#: src/components/channel_config/EditChannelForm.tsx:248
+#: src/components/channel_config/EditChannelForm.tsx:255
 msgid "Streaming"
 msgstr ""
 
@@ -3828,7 +3874,7 @@ msgstr ""
 msgid "The End."
 msgstr ""
 
-#: src/components/channel_config/ChannelTranscodingConfig.tsx:450
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:637
 msgid "The image will be rendered at its actual size without any scaling applied."
 msgstr ""
 
@@ -3840,7 +3886,7 @@ msgstr ""
 msgid "The selected languages will be considered in order they are selected."
 msgstr ""
 
-#: src/components/channel_config/ChannelTranscodingConfig.tsx:154
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:197
 msgid "The streaming mode affects the type of underlying transcoding process used to create the channel's video stream.<0/>Learn more about Tunarr's stream modes <1>here</1>!"
 msgstr ""
 
@@ -3990,6 +4036,10 @@ msgstr ""
 msgid "Title"
 msgstr ""
 
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:488
+#~ msgid "Title format"
+#~ msgstr ""
+
 #: src/components/programming_controls/AddRestrictHoursModal.tsx:120
 msgid "TO"
 msgstr ""
@@ -4051,7 +4101,7 @@ msgstr ""
 msgid "Transcoding Configs"
 msgstr ""
 
-#: src/components/channel_config/ChannelTranscodingConfig.tsx:129
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:169
 msgid "Transcoding Settings"
 msgstr ""
 
@@ -4161,7 +4211,7 @@ msgstr ""
 msgid "Use Show Poster"
 msgstr ""
 
-#: src/components/channel_config/ChannelTranscodingConfig.tsx:132
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:172
 msgid "Use these settings to override global ffmpeg settings for this channel."
 msgstr ""
 
@@ -4261,11 +4311,11 @@ msgstr ""
 msgid "Watch Channel"
 msgstr ""
 
-#: src/components/channel_config/ChannelTranscodingConfig.tsx:235
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:284
 msgid "Watermark"
 msgstr ""
 
-#: src/components/channel_config/ChannelTranscodingConfig.tsx:344
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:525
 msgid "Watermark Image URL"
 msgstr ""
 
@@ -4309,7 +4359,7 @@ msgstr ""
 msgid "Welcome to Tunarr!"
 msgstr ""
 
-#: src/components/channel_config/ChannelTranscodingConfig.tsx:502
+#: src/components/channel_config/ChannelTranscodingConfig.tsx:696
 msgid "When enabled, intermittent watermarks fade in immediately when a stream is initialized. When disabled, the first watermark fade-in occurs after a full period."
 msgstr ""
 

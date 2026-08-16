@@ -13,11 +13,23 @@ import {
   Slider,
   Stack,
   Switch,
+  TextField,
 } from '@mui/material';
 import Box from '@mui/material/Box';
 import Grid from '@mui/material/Grid';
 import Typography from '@mui/material/Typography';
-import { isNonEmptyString } from '@tunarr/shared/util';
+import {
+  DefaultProgramTitleTemplate,
+  isNonEmptyString,
+  MaxProgramTitleLines,
+  programTitleLineCount,
+  programTitleOverlayHeight,
+  renderProgramTitleTemplate,
+  ProgramTitleOverlayFontSize,
+  ProgramTitleOverlayLineHeight,
+  ProgramTitleOverlayWidth,
+  type ProgramTitleTemplateToken,
+} from '@tunarr/shared/util';
 import type { ChannelStreamMode, Watermark } from '@tunarr/types';
 import { find, map, range, round } from 'lodash-es';
 import { useMemo, useState } from 'react';
@@ -43,6 +55,27 @@ const watermarkPositionOptions: {
   { value: 'top-right', label: 'Top Right' },
   { value: 'top-left', label: 'Top Left' },
 ];
+
+const watermarkSourceOptions: {
+  value: NonNullable<Watermark['source']>;
+}[] = [{ value: 'image' }, { value: 'program-title' }];
+
+function renderProgramTitlePreview(template?: string): string {
+  const values: Record<ProgramTitleTemplateToken, string> = {
+    album: 'Songs in the Key of Springfield',
+    artist: 'The Simpsons',
+    episode: 'E02',
+    season: 'S08',
+    seasonEpisode: 'S08E02',
+    show: 'The Simpsons',
+    title: 'You Only Move Twice',
+  };
+
+  return renderProgramTitleTemplate(
+    isNonEmptyString(template?.trim()) ? template : DefaultProgramTitleTemplate,
+    values,
+  );
+}
 
 const ChannelStreamModeOptions: {
   value: ChannelStreamMode;
@@ -120,6 +153,13 @@ export default function ChannelTranscodingConfig() {
     watermark?.position === 'bottom-left' ||
     watermark?.position === 'bottom-right';
   const watermarkPath = watch('watermark.url');
+  const watermarkSource = watermark?.source ?? 'image';
+  const programTitlePreview = renderProgramTitlePreview(
+    watermark?.programTitleTemplate,
+  );
+  const programTitleOverlayAspectRatio = `${ProgramTitleOverlayWidth} / ${programTitleOverlayHeight(
+    programTitleLineCount(programTitlePreview),
+  )}`;
 
   return (
     channel && (
@@ -129,7 +169,10 @@ export default function ChannelTranscodingConfig() {
             <Trans>Transcoding Settings</Trans>
           </Typography>
           <Typography variant="subtitle1">
-            <Trans>Use these settings to override global ffmpeg settings for this channel.</Trans>
+            <Trans>
+              Use these settings to override global ffmpeg settings for this
+              channel.
+            </Trans>
           </Typography>
           <Stack direction={{ sm: 'column', md: 'row' }} useFlexGap spacing={2}>
             <FormControl margin="normal">
@@ -172,7 +215,10 @@ export default function ChannelTranscodingConfig() {
                 control={control}
                 name="transcodeConfigId"
                 render={({ field }) => (
-                  <Select<string> label={t`Channel Transcode Config`} {...field}>
+                  <Select<string>
+                    label={t`Channel Transcode Config`}
+                    {...field}
+                  >
                     {transcodeConfigs.data.map((opt) => (
                       <MenuItem key={opt.id} value={opt.id}>
                         {opt.name}
@@ -200,7 +246,9 @@ export default function ChannelTranscodingConfig() {
               <Trans>Audio &amp; Subtitles</Trans>
             </Typography>
             <Typography variant="subtitle1">
-              <Trans>Override global audio and subtitle settings for this channel.</Trans>
+              <Trans>
+                Override global audio and subtitle settings for this channel.
+              </Trans>
             </Typography>
             <Divider sx={{ my: 2 }} />
             <FormControlLabel
@@ -232,7 +280,9 @@ export default function ChannelTranscodingConfig() {
           </Stack>
         </Stack>
         <Box>
-          <Typography variant="h5"><Trans>Watermark</Trans></Typography>
+          <Typography variant="h5">
+            <Trans>Watermark</Trans>
+          </Typography>
           <FormControl fullWidth>
             <FormControlLabel
               control={
@@ -249,8 +299,8 @@ export default function ChannelTranscodingConfig() {
             />
             <FormHelperText>
               <Trans>
-                Renders a channel icon (also known as bug or Digital On-screen
-                Graphic) on top of the channel's stream.
+                Renders an image or the current program's metadata on top of the
+                channel's stream.
               </Trans>
             </FormHelperText>
           </FormControl>
@@ -271,26 +321,66 @@ export default function ChannelTranscodingConfig() {
                       overflow: 'hidden',
                     }}
                   >
-                    <Box
-                      component="img"
-                      sx={{
-                        position: 'absolute',
-                        width:
-                          watermark?.width && !watermark?.fixedSize
-                            ? `${watermark.width}%`
-                            : null,
-                        opacity: opacity ? opacity / 100 : 1.0,
-                        [isBottom ? 'bottom' : 'top']:
-                          `${watermark?.verticalMargin}%`,
-                        [isRight ? 'right' : 'left']:
-                          `${watermark?.horizontalMargin}%`,
-                      }}
-                      src={
-                        [watermarkPath, channel.icon.path].find(
-                          isNonEmptyString,
-                        ) ?? `${backendUri}/images/tunarr.png`
-                      }
-                    />
+                    {watermarkSource === 'program-title' ? (
+                      <Box
+                        sx={{
+                          aspectRatio: programTitleOverlayAspectRatio,
+                          containerType: 'inline-size',
+                          opacity: opacity ? opacity / 100 : 1.0,
+                          overflow: 'hidden',
+                          position: 'absolute',
+                          width: `${watermark?.width ?? 75}%`,
+                          [isBottom ? 'bottom' : 'top']:
+                            `${watermark?.verticalMargin}%`,
+                          [isRight ? 'right' : 'left']:
+                            `${watermark?.horizontalMargin}%`,
+                        }}
+                      >
+                        <Typography
+                          component="div"
+                          sx={{
+                            color: 'white',
+                            fontSize: `${
+                              (100 * ProgramTitleOverlayFontSize) /
+                              ProgramTitleOverlayWidth
+                            }cqw`,
+                            fontWeight: 400,
+                            left: '0.5%',
+                            lineHeight:
+                              ProgramTitleOverlayLineHeight /
+                              ProgramTitleOverlayFontSize,
+                            position: 'absolute',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            WebkitTextStroke: 'max(0.5px, 0.1875cqw) black',
+                            whiteSpace: 'pre',
+                          }}
+                        >
+                          {programTitlePreview}
+                        </Typography>
+                      </Box>
+                    ) : (
+                      <Box
+                        component="img"
+                        sx={{
+                          position: 'absolute',
+                          width:
+                            watermark?.width && !watermark?.fixedSize
+                              ? `${watermark.width}%`
+                              : null,
+                          opacity: opacity ? opacity / 100 : 1.0,
+                          [isBottom ? 'bottom' : 'top']:
+                            `${watermark?.verticalMargin}%`,
+                          [isRight ? 'right' : 'left']:
+                            `${watermark?.horizontalMargin}%`,
+                        }}
+                        src={
+                          [watermarkPath, channel.icon.path].find(
+                            isNonEmptyString,
+                          ) ?? `${backendUri}/images/tunarr.png`
+                        }
+                      />
+                    )}
                     {safeTitleIndicatorVisible && (
                       <Box
                         sx={{
@@ -334,28 +424,122 @@ export default function ChannelTranscodingConfig() {
                   sx={{ flexGrow: 1, height: 'fit-content' }}
                 >
                   <Grid size={{ xs: 12 }}>
-                    <Controller
-                      name="watermark.url"
-                      control={control}
-                      render={({ field }) => (
-                        <ImageUploadInput
-                          // TODO: This should be something like {channel.id}_fallback_picture.ext
-                          fileRenamer={typedProperty('name')}
-                          label={t`Watermark Image URL`}
-                          onFormValueChange={(newPath) =>
-                            field.onChange(newPath)
-                          }
-                          onUploadError={console.error}
-                          FormControlProps={{ fullWidth: true }}
-                          value={field.value ?? ''}
-                        >
-                          <FormHelperText>
-                            <Trans>Leave blank to use the channel's icon.</Trans>
-                          </FormHelperText>
-                        </ImageUploadInput>
-                      )}
-                    />
+                    <FormControl fullWidth>
+                      <InputLabel>{t`Overlay source`}</InputLabel>
+                      <Controller
+                        name="watermark.source"
+                        control={control}
+                        render={({ field }) => (
+                          <Select<NonNullable<Watermark['source']>>
+                            label={t`Overlay source`}
+                            {...field}
+                            value={field.value ?? 'image'}
+                            onChange={(event) => {
+                              field.onChange(event);
+                              if (event.target.value === 'program-title') {
+                                setValue('watermark.animated', false, {
+                                  shouldDirty: true,
+                                });
+                                setValue('watermark.fixedSize', false, {
+                                  shouldDirty: true,
+                                });
+                                if (getValues('watermark.duration') === 0) {
+                                  setValue('watermark.duration', 5, {
+                                    shouldDirty: true,
+                                  });
+                                }
+                                if (getValues('watermark.width') === 10) {
+                                  setValue('watermark.width', 75, {
+                                    shouldDirty: true,
+                                  });
+                                }
+                              }
+                            }}
+                          >
+                            {watermarkSourceOptions.map((option) => (
+                              <MenuItem key={option.value} value={option.value}>
+                                {option.value === 'image'
+                                  ? t`Image`
+                                  : t`Now playing`}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        )}
+                      />
+                      <FormHelperText>
+                        <Trans>
+                          Now playing overlays draw the current program's
+                          metadata and restart at every program cutover.
+                        </Trans>
+                      </FormHelperText>
+                    </FormControl>
                   </Grid>
+                  {watermarkSource === 'program-title' && (
+                    <Grid size={{ xs: 12 }}>
+                      <Controller
+                        name="watermark.programTitleTemplate"
+                        control={control}
+                        render={({ field }) => (
+                          <TextField
+                            {...field}
+                            fullWidth
+                            multiline
+                            minRows={2}
+                            label={t`Now playing format`}
+                            placeholder={DefaultProgramTitleTemplate}
+                            slotProps={{ htmlInput: { maxLength: 500 } }}
+                            value={field.value ?? ''}
+                            helperText={
+                              <>
+                                <Trans>Available tokens:</Trans>{' '}
+                                <code>{'{show}'}</code>,{' '}
+                                <code>{'{season}'}</code>,{' '}
+                                <code>{'{episode}'}</code>,{' '}
+                                <code>{'{seasonEpisode}'}</code>,{' '}
+                                <code>{'{title}'}</code>,{' '}
+                                <code>{'{artist}'}</code>,{' '}
+                                <code>{'{album}'}</code>.
+                                <br />
+                                <Trans>
+                                  Press Enter or use <code>\n</code> to draw the
+                                  title on multiple lines (up to{' '}
+                                  {MaxProgramTitleLines}). The overlay grows
+                                  taller with each line.
+                                </Trans>
+                              </>
+                            }
+                          />
+                        )}
+                      />
+                    </Grid>
+                  )}
+                  {watermarkSource === 'image' && (
+                    <Grid size={{ xs: 12 }}>
+                      <Controller
+                        name="watermark.url"
+                        control={control}
+                        render={({ field }) => (
+                          <ImageUploadInput
+                            // TODO: This should be something like {channel.id}_fallback_picture.ext
+                            fileRenamer={typedProperty('name')}
+                            label={t`Watermark Image URL`}
+                            onFormValueChange={(newPath) =>
+                              field.onChange(newPath)
+                            }
+                            onUploadError={console.error}
+                            FormControlProps={{ fullWidth: true }}
+                            value={field.value ?? ''}
+                          >
+                            <FormHelperText>
+                              <Trans>
+                                Leave blank to use the channel's icon.
+                              </Trans>
+                            </FormHelperText>
+                          </ImageUploadInput>
+                        )}
+                      />
+                    </Grid>
+                  )}
                   <Grid size={{ xs: 12 }}>
                     <FormControl fullWidth margin="normal">
                       <InputLabel>{t`Position`}</InputLabel>
@@ -412,7 +596,9 @@ export default function ChannelTranscodingConfig() {
                   </Grid>
                   <Grid size={{ xs: 12 }}>
                     <FormControl fullWidth>
-                      <Typography gutterBottom><Trans>Opacity</Trans></Typography>
+                      <Typography gutterBottom>
+                        <Trans>Opacity</Trans>
+                      </Typography>
                       <Box sx={{ px: 2 }}>
                         <Slider
                           min={0}
@@ -435,43 +621,51 @@ export default function ChannelTranscodingConfig() {
                   <Grid size={{ xs: 12 }}>
                     <Divider />
                   </Grid>
-                  <Grid size={{ xs: 12, lg: 6 }}>
-                    <FormControl fullWidth>
-                      <FormControlLabel
-                        control={
-                          <CheckboxFormController
-                            control={control}
-                            name="watermark.fixedSize"
-                          />
-                        }
-                        label={t`Disable Image Scaling`}
-                      />
-                      <FormHelperText>
-                        <Trans>The image will be rendered at its actual size without any scaling applied.</Trans>
-                      </FormHelperText>
-                    </FormControl>
-                  </Grid>
-                  <Grid size={{ xs: 12, lg: 6 }}>
-                    <FormControl fullWidth>
-                      <FormControlLabel
-                        control={
-                          <CheckboxFormController
-                            control={control}
-                            name="watermark.animated"
-                          />
-                        }
-                        label={t`Enable Animation`}
-                      />
-                      <FormHelperText>
-                        <Trans>
-                          Enable if the watermark is an animated GIF or PNG. The
-                          watermark will loop according to the image's
-                          configuration. If this option is enabled and the image
-                          is not animated, there will be playback errors.
-                        </Trans>
-                      </FormHelperText>
-                    </FormControl>
-                  </Grid>
+                  {watermarkSource === 'image' && (
+                    <Grid size={{ xs: 12, lg: 6 }}>
+                      <FormControl fullWidth>
+                        <FormControlLabel
+                          control={
+                            <CheckboxFormController
+                              control={control}
+                              name="watermark.fixedSize"
+                            />
+                          }
+                          label={t`Disable Image Scaling`}
+                        />
+                        <FormHelperText>
+                          <Trans>
+                            The image will be rendered at its actual size
+                            without any scaling applied.
+                          </Trans>
+                        </FormHelperText>
+                      </FormControl>
+                    </Grid>
+                  )}
+                  {watermarkSource === 'image' && (
+                    <Grid size={{ xs: 12, lg: 6 }}>
+                      <FormControl fullWidth>
+                        <FormControlLabel
+                          control={
+                            <CheckboxFormController
+                              control={control}
+                              name="watermark.animated"
+                            />
+                          }
+                          label={t`Enable Animation`}
+                        />
+                        <FormHelperText>
+                          <Trans>
+                            Enable if the watermark is an animated GIF or PNG.
+                            The watermark will loop according to the image's
+                            configuration. If this option is enabled and the
+                            image is not animated, there will be playback
+                            errors.
+                          </Trans>
+                        </FormHelperText>
+                      </FormControl>
+                    </Grid>
+                  )}
 
                   <Grid size={{ xs: 12, lg: 6 }}>
                     <NumericFormControllerText

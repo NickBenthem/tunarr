@@ -24,6 +24,10 @@ export class BasicProgramRepository {
     return this.drizzleDB.query.program.findFirst({
       where: (fields, { eq }) => eq(fields.uuid, id),
       with: {
+        album: { with: { externalIds: true } },
+        artist: { with: { externalIds: true } },
+        season: { with: { externalIds: true } },
+        show: { with: { externalIds: true } },
         externalIds: true,
         artwork: true,
         subtitles: true,

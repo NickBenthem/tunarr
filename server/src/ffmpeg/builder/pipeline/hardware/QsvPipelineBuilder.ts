@@ -608,7 +608,14 @@ export class QsvPipelineBuilder extends SoftwarePipelineBuilder {
       return false;
     }
 
-    return true;
+    // Watermark inputs widened to VideoStream for program-title overlays, so a
+    // multi-frame 'video' input is now possible; only a single still frame or a
+    // generated lavfi source can be uploaded once and composited on the GPU.
+    return every(
+      this.watermarkInputSource.streams,
+      (stream) =>
+        stream.inputKind === 'stillimage' || stream.inputKind === 'filter',
+    );
   }
 
   protected addSubtitles(currentState: FrameState): FrameState {

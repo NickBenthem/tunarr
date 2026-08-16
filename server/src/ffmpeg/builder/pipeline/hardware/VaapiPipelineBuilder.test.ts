@@ -1,7 +1,11 @@
 import { ColorFormat } from '@/ffmpeg/builder/format/ColorFormat.js';
 import { TONEMAP_ENABLED, TUNARR_ENV_VARS } from '@/util/env.js';
 import type { Watermark } from '@tunarr/types';
-import { FileStreamSource } from '../../../../stream/types.ts';
+import {
+  FileStreamSource,
+  FilterStreamSource,
+  type StreamSource,
+} from '../../../../stream/types.ts';
 import {
   EmptyFfmpegCapabilities,
   FfmpegCapabilities,
@@ -39,6 +43,7 @@ import { LavfiVideoInputSource } from '../../input/LavfiVideoInputSource.ts';
 import { SubtitlesInputSource } from '../../input/SubtitlesInputSource.ts';
 import { VideoInputSource } from '../../input/VideoInputSource.ts';
 import { WatermarkInputSource } from '../../input/WatermarkInputSource.ts';
+import { LavfiInputOption } from '../../options/input/LavfiInputOption.ts';
 import {
   AudioStream,
   EmbeddedSubtitleStream,
@@ -539,7 +544,8 @@ describe('VaapiPipelineBuilder pad', () => {
     binaryCapabilities?: FfmpegCapabilities;
     disableHardwareDecoding?: boolean;
     disableHardwareEncoding?: boolean;
-    watermarkStream?: StillImageStream;
+    watermarkSource?: StreamSource;
+    watermarkStream?: VideoStream;
     watermark?: Partial<Watermark>;
   }) {
     const capabilities = new VaapiHardwareCapabilities([
@@ -570,7 +576,7 @@ describe('VaapiPipelineBuilder pad', () => {
     let wm: WatermarkInputSource | null = null;
     if (opts.watermarkStream) {
       wm = new WatermarkInputSource(
-        new FileStreamSource('/path/to/watermark.png'),
+        opts.watermarkSource ?? new FileStreamSource('/path/to/watermark.png'),
         opts.watermarkStream,
         {
           duration: 0,
@@ -583,6 +589,9 @@ describe('VaapiPipelineBuilder pad', () => {
           ...opts.watermark,
         },
       );
+      if (opts.watermarkSource?.type === 'filter') {
+        wm.addOption(new LavfiInputOption());
+      }
     }
 
     const builder = new VaapiPipelineBuilder(
@@ -814,6 +823,32 @@ describe('VaapiPipelineBuilder pad', () => {
     expect(args).not.toContain('hwdownload');
   });
 
+  test('keeps generated program-title inputs on the VAAPI overlay path', () => {
+    const pipeline = buildWithPad({
+      videoStream: create169FhdVideoStream(),
+      watermarkSource: new FilterStreamSource(
+        'color=c=black@0.0:s=1600x96,format=rgba',
+      ),
+      watermarkStream: VideoStream.create({
+        codec: 'generated',
+        colorFormat: ColorFormat.unknown,
+        displayAspectRatio: '50:3',
+        frameSize: FrameSize.withDimensions(1600, 96),
+        index: 0,
+        inputKind: 'filter',
+        pixelFormat: new PixelFormatRgba(),
+        providedSampleAspectRatio: '1:1',
+      }),
+      watermark: { duration: 5 },
+    });
+
+    const args = pipeline.getCommandArgs().join(' ');
+    expect(args).toContain('-f lavfi');
+    expect(args).toContain('overlay_vaapi');
+    expect(args).not.toContain('hwdownload');
+    expect(args).not.toContain('-loop 1');
+  });
+
   test('falls back to software overlay when overlay_vaapi is unavailable', () => {
     const pipeline = buildWithPad({
       videoStream: create43VideoStream(),
@@ -843,6 +878,26 @@ describe('VaapiPipelineBuilder pad', () => {
         index: 0,
       }),
       watermark: { animated: true },
+    });
+
+    const args = pipeline.getCommandArgs().join(' ');
+    expect(args).toContain('hwdownload');
+    expect(args).not.toContain('overlay_vaapi');
+  });
+
+  test('falls back to software overlay for multi-frame watermark inputs', () => {
+    const pipeline = buildWithPad({
+      videoStream: create43VideoStream(),
+      watermarkStream: VideoStream.create({
+        codec: VideoFormats.H264,
+        colorFormat: null,
+        displayAspectRatio: '1:1',
+        frameSize: FrameSize.withDimensions(100, 100),
+        index: 0,
+        inputKind: 'video',
+        pixelFormat: new PixelFormatYuv420P(),
+        providedSampleAspectRatio: '1:1',
+      }),
     });
 
     const args = pipeline.getCommandArgs().join(' ');
