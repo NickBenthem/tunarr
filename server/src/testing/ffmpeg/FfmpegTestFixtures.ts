@@ -11,22 +11,31 @@ import { FfprobeStreamDetails } from '@/stream/FfprobeStreamDetails.js';
 import { FileStreamSource } from '@/stream/types.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import pino from 'pino';
 import { test as base } from 'vitest';
 import type { FfmpegCapabilities } from '../../ffmpeg/builder/capabilities/FfmpegCapabilities.ts';
 import type { NvidiaHardwareCapabilities } from '../../ffmpeg/builder/capabilities/NvidiaHardwareCapabilities.ts';
 import type { QsvHardwareCapabilities } from '../../ffmpeg/builder/capabilities/QsvHardwareCapabilities.ts';
-import type { FfmpegVersionResult } from '../../ffmpeg/ffmpegInfo.ts';
-import { FfmpegInfo } from '../../ffmpeg/ffmpegInfo.ts';
-import type { Logger } from '../../util/logging/LoggerFactory.ts';
+import type {
+  FfmpegInfo,
+  FfmpegVersionResult,
+} from '../../ffmpeg/ffmpegInfo.ts';
+import type { VaapiDeviceInfo } from './FfmpegIntegrationHelper.ts';
 import {
-  discoverFfmpegBinaries,
-  discoverNvidiaCapabilities,
-  discoverQsvCapabilities,
-  discoverVaapiDevice,
-  discoverVaapiOpenclSupport,
-  type VaapiDeviceInfo,
-} from './FfmpegIntegrationHelper.ts';
+  makeFfmpegInfo,
+  nvidiaCaps,
+  qsvInfo,
+  vaapiInfo,
+} from './HardwareSupport.ts';
+
+// Re-exported so suites can gate on hardware and build fixtures from a single
+// import.
+export {
+  binaries,
+  nvidiaCaps,
+  qsvInfo,
+  vaapiInfo,
+  vaapiOpenclSupported,
+} from './HardwareSupport.ts';
 
 const fixturesDir = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -80,30 +89,6 @@ export async function deriveVideoStreamForFixture(
       }),
     }),
   );
-}
-
-export const binaries = discoverFfmpegBinaries();
-
-export const vaapiInfo = discoverVaapiDevice();
-
-export const qsvInfo = binaries
-  ? discoverQsvCapabilities(binaries.ffmpeg)
-  : null;
-
-export const nvidiaCaps = binaries
-  ? discoverNvidiaCapabilities(binaries.ffmpeg)
-  : null;
-
-export const vaapiOpenclSupported =
-  binaries && vaapiInfo
-    ? discoverVaapiOpenclSupport(binaries.ffmpeg, vaapiInfo.device)
-    : false;
-
-const noopLogger = pino({ level: 'silent' }) as Logger;
-
-function makeFfmpegInfo(): FfmpegInfo {
-  // Instantiate directly, ignoring Inversify DI bindings
-  return new FfmpegInfo(binaries!.ffmpeg, binaries!.ffprobe, noopLogger);
 }
 
 export type FfmpegTestFixtures = {

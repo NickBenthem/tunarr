@@ -18,6 +18,7 @@ import { ScaleVaapiFilter } from '@/ffmpeg/builder/filter/vaapi/ScaleVaapiFilter
 import { TonemapVaapiFilter } from '@/ffmpeg/builder/filter/vaapi/TonemapVaapiFilter.js';
 import { VaapiFormatFilter } from '@/ffmpeg/builder/filter/vaapi/VaapiFormatFilter.js';
 import { OverlayWatermarkFilter } from '@/ffmpeg/builder/filter/watermark/OverlayWatermarkFilter.js';
+import { WatermarkBoundsFilter } from '@/ffmpeg/builder/filter/watermark/WatermarkBoundsFilter.js';
 import { WatermarkDurationFilter } from '@/ffmpeg/builder/filter/watermark/WatermarkDurationFilter.js';
 import { WatermarkOpacityFilter } from '@/ffmpeg/builder/filter/watermark/WatermarkOpacityFilter.js';
 import { WatermarkScaleFilter } from '@/ffmpeg/builder/filter/watermark/WatermarkScaleFilter.js';
@@ -645,6 +646,17 @@ export class VaapiPipelineBuilder extends SoftwarePipelineBuilder {
     watermarkInput.filterSteps.push(
       ...this.getWatermarkFadeFilters(watermarkInput.watermark),
     );
+
+    if (useHardwareOverlay) {
+      const { width, height } = this.desiredState.paddedSize;
+      const { horizontalMargin, verticalMargin } = watermarkInput.watermark;
+      watermarkInput.filterSteps.push(
+        new WatermarkBoundsFilter(
+          width - Math.round((horizontalMargin / 100) * width),
+          height - Math.round((verticalMargin / 100) * height),
+        ),
+      );
+    }
 
     if (useHardwareOverlay && watermarkInput.watermark.duration > 0) {
       watermarkInput.filterSteps.push(

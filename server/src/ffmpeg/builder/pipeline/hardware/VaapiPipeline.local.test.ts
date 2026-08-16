@@ -1,8 +1,12 @@
+import type { Watermark } from '@tunarr/types';
 import dayjs from 'dayjs';
 import duration from 'dayjs/plugin/duration.js';
 import path from 'node:path';
+import type { FfmpegVersionResult } from '../../../../ffmpeg/ffmpegInfo.ts';
 import { FileStreamSource } from '../../../../stream/types.ts';
+import type { VaapiDeviceInfo } from '../../../../testing/ffmpeg/FfmpegIntegrationHelper.ts';
 import {
+  averageLumaAt,
   createTempWorkdir,
   probeFile,
   runFfmpegWithPipeline,
@@ -2554,6 +2558,214 @@ describe.skipIf(!binaries || !vaapiInfo || !canDecodeHdr)(
           exitCode,
           `Pipeline command failed: ${pipeline.getCommandArgs().join(' ')}\n${stderr}`,
         ).toBe(0);
+        const probe = probeFile(binaries!.ffprobe, outputPath);
+        expect(probe.streams.some((s) => s.codec_type === 'video')).toBe(true);
+      },
+    );
+  },
+);
+
+// ─── Hardware watermark overlay ───────────────────────────────────────────────
+
+describe.skipIf(!binaries || !vaapiInfo)(
+  'VaapiPipelineBuilder hardware watermark overlay integration',
+  () => {
+    let workdir: string;
+    let cleanup: () => Promise<void>;
+
+    beforeAll(async () => {
+      ({ dir: workdir, cleanup } = await createTempWorkdir());
+    });
+
+    afterAll(() => cleanup());
+
+    function makeWatermarkInput(overrides: Partial<Watermark> = {}) {
+      return new WatermarkInputSource(
+        new FileStreamSource(Fixtures.watermark),
+        StillImageStream.create({
+          frameSize: FrameSize.withDimensions(100, 100),
+          index: 0,
+        }),
+        {
+          enabled: true,
+          position: 'top-left',
+          width: 10,
+          verticalMargin: 5,
+          horizontalMargin: 5,
+          duration: 0,
+          opacity: 100,
+          ...overrides,
+        },
+      );
+    }
+
+    // 16:9 720p → scaledSize == paddedSize, so no pad filter is selected and
+    // the overlay is exercised on its own rather than behind pad_vaapi/opencl.
+    function makeFrameState() {
+      return new FrameState({
+        isAnamorphic: false,
+        scaledSize: FrameSize.FHD,
+        paddedSize: FrameSize.FHD,
+        pixelFormat: new PixelFormatYuv420P(),
+        videoFormat: VideoFormats.H264,
+      });
+    }
+
+    function runWatermarkPipeline(opts: {
+      binaryCapabilities: FfmpegCapabilities;
+      ffmpegVersion: FfmpegVersionResult;
+      resolvedVaapi: VaapiDeviceInfo;
+      watermark: WatermarkInputSource;
+      outputName: string;
+      outputSeconds?: number;
+    }) {
+      const video = makeVideoInput(
+        Fixtures.video720p,
+        FrameSize.withDimensions(1280, 720),
+      );
+      const audio = makeAudioInput(Fixtures.video720p);
+
+      const builder = new VaapiPipelineBuilder(
+        opts.resolvedVaapi.capabilities,
+        opts.binaryCapabilities,
+        video,
+        audio,
+        opts.watermark,
+        null,
+        null,
+      );
+
+      const outputPath = path.join(workdir, opts.outputName);
+      const pipeline = builder.build(
+        FfmpegState.create({
+          duration: dayjs.duration(opts.outputSeconds ?? 1, 'second'),
+          version: opts.ffmpegVersion,
+          outputLocation: FileOutputLocation(outputPath, true),
+          vaapiDevice: opts.resolvedVaapi.device,
+        }),
+        makeFrameState(),
+        DefaultPipelineOptions,
+      );
+
+      const args = pipeline.getCommandArgs();
+      const { exitCode, stderr } = runFfmpegWithPipeline(
+        binaries!.ffmpeg,
+        args,
+      );
+
+      expect(
+        exitCode,
+        `Pipeline command failed: ${args.join(' ')}\n${stderr}`,
+      ).toBe(0);
+
+      return { args: args.join(' '), outputPath };
+    }
+
+    vaapiTest(
+      'composites a watermark on the GPU',
+      async ({ binaryCapabilities, ffmpegVersion, resolvedVaapi }) => {
+        const { args, outputPath } = runWatermarkPipeline({
+          binaryCapabilities,
+          ffmpegVersion,
+          resolvedVaapi,
+          watermark: makeWatermarkInput(),
+          outputName: 'hw_overlay.ts',
+        });
+
+        expect(args).toContain('overlay_vaapi');
+        expect(args).not.toContain('hwdownload');
+
+        const probe = probeFile(binaries!.ffprobe, outputPath);
+        expect(probe.streams.some((s) => s.codec_type === 'video')).toBe(true);
+      },
+    );
+
+    vaapiTest(
+      'composites a partially transparent watermark on the GPU',
+      async ({ binaryCapabilities, ffmpegVersion, resolvedVaapi }) => {
+        // Opacity is applied to the watermark before it is uploaded, so the
+        // surface handed to overlay_vaapi carries an alpha channel.
+        const { args, outputPath } = runWatermarkPipeline({
+          binaryCapabilities,
+          ffmpegVersion,
+          resolvedVaapi,
+          watermark: makeWatermarkInput({ opacity: 50 }),
+          outputName: 'hw_overlay_opacity.ts',
+        });
+
+        expect(args).toContain('overlay_vaapi');
+
+        const probe = probeFile(binaries!.ffprobe, outputPath);
+        expect(probe.streams.some((s) => s.codec_type === 'video')).toBe(true);
+      },
+    );
+
+    vaapiTest(
+      'composites a watermark larger than the frame',
+      async ({ binaryCapabilities, ffmpegVersion, resolvedVaapi }) => {
+        // A full-width square watermark is taller than a 16:9 frame. The
+        // software overlay clips it; a hardware overlay handed a surface that
+        // does not fit the destination fails the stream outright.
+        const { args, outputPath } = runWatermarkPipeline({
+          binaryCapabilities,
+          ffmpegVersion,
+          resolvedVaapi,
+          watermark: makeWatermarkInput({ width: 100 }),
+          outputName: 'hw_overlay_oversized.ts',
+        });
+
+        expect(args).toContain('overlay_vaapi');
+
+        const probe = probeFile(binaries!.ffprobe, outputPath);
+        expect(probe.streams.some((s) => s.codec_type === 'video')).toBe(true);
+      },
+    );
+
+    vaapiTest(
+      'stops compositing a finite watermark once its duration elapses',
+      async ({ binaryCapabilities, ffmpegVersion, resolvedVaapi }) => {
+        const { args, outputPath } = runWatermarkPipeline({
+          binaryCapabilities,
+          ffmpegVersion,
+          resolvedVaapi,
+          watermark: makeWatermarkInput({ duration: 1 }),
+          outputName: 'hw_overlay_finite.ts',
+          outputSeconds: 3,
+        });
+
+        expect(args).toContain('overlay_vaapi');
+
+        // The watermark is white and covers 10% of a 1920x1080 frame at 5%
+        // margins; the video underneath it is near black at both timestamps.
+        const region = { x: 96, y: 54, width: 192, height: 192 };
+        const whileVisible = averageLumaAt(binaries!.ffmpeg, outputPath, {
+          ...region,
+          seconds: 0.5,
+        });
+        const afterExpiry = averageLumaAt(binaries!.ffmpeg, outputPath, {
+          ...region,
+          seconds: 2.5,
+        });
+
+        expect(whileVisible).toBeGreaterThan(200);
+        expect(afterExpiry).toBeLessThan(100);
+      },
+    );
+
+    vaapiTest(
+      'falls back to the software overlay for animated watermarks',
+      async ({ binaryCapabilities, ffmpegVersion, resolvedVaapi }) => {
+        const { args, outputPath } = runWatermarkPipeline({
+          binaryCapabilities,
+          ffmpegVersion,
+          resolvedVaapi,
+          watermark: makeWatermarkInput({ animated: true }),
+          outputName: 'sw_overlay_animated.ts',
+        });
+
+        expect(args).not.toContain('overlay_vaapi');
+        expect(args).toContain('overlay=');
+
         const probe = probeFile(binaries!.ffprobe, outputPath);
         expect(probe.streams.some((s) => s.codec_type === 'video')).toBe(true);
       },
