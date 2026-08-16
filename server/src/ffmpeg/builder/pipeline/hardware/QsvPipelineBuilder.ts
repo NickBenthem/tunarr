@@ -14,10 +14,13 @@ import { ScaleFilter } from '@/ffmpeg/builder/filter/ScaleFilter.js';
 import { DeinterlaceQsvFilter } from '@/ffmpeg/builder/filter/qsv/DeinterlaceQsvFilter.js';
 import { QsvFormatFilter } from '@/ffmpeg/builder/filter/qsv/QsvFormatFilter.js';
 import { ScaleQsvFilter } from '@/ffmpeg/builder/filter/qsv/ScaleQsvFilter.js';
+import { OverlayWatermarkQsvFilter } from '@/ffmpeg/builder/filter/qsv/OverlayWatermarkQsvFilter.js';
 import { OverlayWatermarkFilter } from '@/ffmpeg/builder/filter/watermark/OverlayWatermarkFilter.js';
+import { WatermarkHideAfterFilter } from '@/ffmpeg/builder/filter/watermark/WatermarkHideAfterFilter.js';
 import { WatermarkOpacityFilter } from '@/ffmpeg/builder/filter/watermark/WatermarkOpacityFilter.js';
 import { WatermarkScaleFilter } from '@/ffmpeg/builder/filter/watermark/WatermarkScaleFilter.js';
 import {
+  PixelFormatBgra,
   PixelFormatNv12,
   PixelFormatP010,
   PixelFormats,
@@ -29,6 +32,7 @@ import type { AudioInputSource } from '@/ffmpeg/builder/input/AudioInputSource.j
 import type { ConcatInputSource } from '@/ffmpeg/builder/input/ConcatInputSource.js';
 import type { VideoInputSource } from '@/ffmpeg/builder/input/VideoInputSource.js';
 import type { WatermarkInputSource } from '@/ffmpeg/builder/input/WatermarkInputSource.js';
+import { KnownFfmpegFilters } from '@/ffmpeg/builder/options/KnownFfmpegOptions.js';
 import { PixelFormatOutputOption } from '@/ffmpeg/builder/options/OutputOption.js';
 import { QsvHardwareAccelerationOption } from '@/ffmpeg/builder/options/hardwareAcceleration/QsvOptions.js';
 import { DoNotIgnoreLoopInputOption } from '@/ffmpeg/builder/options/input/DoNotIgnoreLoopInputOption.js';
@@ -170,10 +174,34 @@ export class QsvPipelineBuilder extends SoftwarePipelineBuilder {
     currentState = this.setPad(currentState);
     this.setStillImageLoop();
 
-    if (currentState.frameDataLocation === FrameDataLocation.Hardware) {
+    const useHardwareWatermarkOverlay = this.canUseHardwareWatermarkOverlay();
+
+    if (
+      currentState.frameDataLocation === FrameDataLocation.Hardware &&
+      !useHardwareWatermarkOverlay
+    ) {
       const hwDownload = new HardwareDownloadFilter(currentState);
       currentState = hwDownload.nextState(currentState);
       this.videoInputSource.filterSteps.push(hwDownload);
+    } else if (
+      currentState.frameDataLocation === FrameDataLocation.Software &&
+      useHardwareWatermarkOverlay
+    ) {
+      // Keep the main stream on the GPU so overlay_qsv can composite there.
+      const hwCompatFormat =
+        currentState.pixelFormat?.bitDepth === 10
+          ? new PixelFormatP010()
+          : new PixelFormatNv12(new PixelFormatYuv420P());
+      if (currentState.pixelFormat?.name !== hwCompatFormat.name) {
+        currentState = this.addFilterToVideoChain(
+          currentState,
+          new PixelFormatFilter(hwCompatFormat),
+        );
+      }
+      currentState = this.addFilterToVideoChain(
+        currentState,
+        new HardwareUploadQsvFilter(64),
+      );
     }
 
     if (this.desiredState.videoFormat !== VideoFormats.Copy) {
@@ -480,11 +508,17 @@ export class QsvPipelineBuilder extends SoftwarePipelineBuilder {
 
     const watermarkInput = this.watermarkInputSource!;
 
+    const useHardwareOverlay =
+      currentState.frameDataLocation === FrameDataLocation.Hardware &&
+      this.canUseHardwareWatermarkOverlay();
+
     for (const watermark of watermarkInput.streams ?? []) {
       if (watermark.inputKind !== 'stillimage') {
         watermarkInput.addOption(new DoNotIgnoreLoopInputOption());
-      } else if (isDefined(head(watermarkInput.watermark.fadeConfig))) {
-        // TODO: Needs hwaccel option here
+      } else if (
+        useHardwareOverlay ||
+        isDefined(head(watermarkInput.watermark.fadeConfig))
+      ) {
         watermarkInput.addOption(new InfiniteLoopInputOption());
       }
     }
@@ -509,6 +543,28 @@ export class QsvPipelineBuilder extends SoftwarePipelineBuilder {
     watermarkInput.filterSteps.push(
       ...this.getWatermarkFadeFilters(watermarkInput.watermark),
     );
+
+    if (useHardwareOverlay) {
+      // QSV represents packed RGB overlays as RGB4 (bgra on the FFmpeg side).
+      watermarkInput.filterSteps.push(
+        new PixelFormatFilter(new PixelFormatBgra()),
+      );
+
+      if (watermarkInput.watermark.duration > 0) {
+        watermarkInput.filterSteps.push(
+          new WatermarkHideAfterFilter(watermarkInput.watermark.duration),
+        );
+      }
+
+      watermarkInput.filterSteps.push(new HardwareUploadQsvFilter(64));
+
+      const overlayFilter = new OverlayWatermarkQsvFilter(
+        watermarkInput.watermark,
+        this.desiredState.paddedSize,
+      );
+      this.context.filterChain.watermarkOverlayFilterSteps.push(overlayFilter);
+      return overlayFilter.nextState(currentState);
+    }
 
     watermarkInput.filterSteps.push(
       new PixelFormatFilter(new PixelFormatYuva420P()),
@@ -537,6 +593,22 @@ export class QsvPipelineBuilder extends SoftwarePipelineBuilder {
     }
 
     return currentState;
+  }
+
+  private canUseHardwareWatermarkOverlay() {
+    if (
+      !this.context.hasWatermark ||
+      !this.watermarkInputSource ||
+      this.context.pipelineOptions.disableHardwareFilters ||
+      this.context.hasSubtitleOverlay() ||
+      this.ffmpegState.encoderHwAccelMode !== HardwareAccelerationMode.Qsv ||
+      this.watermarkInputSource.watermark.animated === true ||
+      !this.ffmpegCapabilities.hasFilter(KnownFfmpegFilters.OverlayQsv)
+    ) {
+      return false;
+    }
+
+    return true;
   }
 
   protected addSubtitles(currentState: FrameState): FrameState {
