@@ -96,11 +96,68 @@ export function runFfmpegWithPipeline(
 ) {
   const result = spawnSync(ffmpegPath, pipelineArgs, {
     stdio: ['ignore', 'ignore', 'pipe'],
+    // A filter graph that never reaches EOF hangs ffmpeg forever. spawnSync
+    // blocks the worker, so vitest's testTimeout cannot interrupt it — the
+    // process has to be killed here or the whole run stalls.
+    timeout: 60_000,
+    killSignal: 'SIGKILL',
   });
   if (result.status !== 0) {
     console.error('ffmpeg failed with stderr: ', result.stderr);
   }
   return { exitCode: result.status ?? -1, stderr: result.stderr };
+}
+
+/**
+ * Mean luma of a rectangle of one decoded frame. Lets a test assert what is
+ * actually composited into the picture at a point in time, which the ffmpeg
+ * arguments alone cannot show.
+ */
+export function averageLumaAt(
+  ffmpegPath: string,
+  filePath: string,
+  region: {
+    seconds: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  },
+): number {
+  const result = spawnSync(
+    ffmpegPath,
+    [
+      '-v',
+      'error',
+      '-i',
+      filePath,
+      // Output seeking: accurate on mpegts, where input seeking lands on the
+      // preceding keyframe or fails outright.
+      '-ss',
+      `${region.seconds}`,
+      '-vf',
+      `crop=${region.width}:${region.height}:${region.x}:${region.y},format=gray`,
+      '-frames:v',
+      '1',
+      '-f',
+      'rawvideo',
+      '-',
+    ],
+    { timeout: 60_000, killSignal: 'SIGKILL' },
+  );
+
+  const pixels = result.stdout;
+  if (!pixels || pixels.length === 0) {
+    throw new Error(
+      `Could not read a frame at ${region.seconds}s of ${filePath}: ${result.stderr?.toString()}`,
+    );
+  }
+
+  let total = 0;
+  for (const luma of pixels) {
+    total += luma;
+  }
+  return total / pixels.length;
 }
 
 export function probeFile(
