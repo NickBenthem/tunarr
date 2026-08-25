@@ -13,6 +13,13 @@ export class OverlayWatermarkFilter extends FilterOption {
     // @ts-expect-error - We're going to use this soon
     private squarePixelResolution: FrameSize,
     private outputPixelFormat: PixelFormat,
+    /**
+     * Set when the watermark input has been bounded by a
+     * WatermarkDurationFilter, in which case the overlay ends with that input.
+     * `enable` only gates whether the overlay is drawn, not whether frames are
+     * pulled from it, so it cannot bound a generated input.
+     */
+    private watermarkInputIsBounded: boolean = false,
   ) {
     super();
   }
@@ -50,11 +57,13 @@ export class OverlayWatermarkFilter extends FilterOption {
   }
 
   public get filter(): string {
-    const enablePart =
+    const durationPart =
       this.watermark.duration > 0
-        ? `:enable='between(t,0,${this.watermark.duration})'`
+        ? this.watermarkInputIsBounded
+          ? ':eof_action=pass:repeatlast=0'
+          : `:enable='between(t,0,${this.watermark.duration})'`
         : '';
     const format = this.outputPixelFormat.bitDepth === 10 ? 1 : 0;
-    return `overlay=${this.getPosition()}:format=${format}${enablePart}`;
+    return `overlay=${this.getPosition()}:format=${format}${durationPart}`;
   }
 }

@@ -1,3 +1,5 @@
+import dayjs from 'dayjs';
+import duration from 'dayjs/plugin/duration.js';
 import { ColorFormat } from '@/ffmpeg/builder/format/ColorFormat.js';
 import { TONEMAP_ENABLED, TUNARR_ENV_VARS } from '@/util/env.js';
 import type { Watermark } from '@tunarr/types';
@@ -115,6 +117,8 @@ afterEach(() => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+
+dayjs.extend(duration);
 
 describe('VaapiPipelineBuilder', () => {
   test('should work', () => {
@@ -547,6 +551,8 @@ describe('VaapiPipelineBuilder pad', () => {
     watermarkSource?: StreamSource;
     watermarkStream?: VideoStream;
     watermark?: Partial<Watermark>;
+    subtitleStream?: SubtitleStream;
+    state?: Partial<Parameters<typeof FfmpegState.create>[0]>;
   }) {
     const capabilities = new VaapiHardwareCapabilities([
       new VaapiProfileEntrypoint(
@@ -600,11 +606,20 @@ describe('VaapiPipelineBuilder pad', () => {
       video,
       null,
       wm,
-      null,
+      opts.subtitleStream
+        ? new SubtitlesInputSource(
+            new FileStreamSource('/path/to/video.mkv'),
+            [opts.subtitleStream],
+            SubtitleMethods.Burn,
+          )
+        : null,
       null,
     );
 
-    const state = FfmpegState.create({ version: fakeVersion });
+    const state = FfmpegState.create({
+      version: fakeVersion,
+      ...opts.state,
+    });
     const videoStream = video.streams[0]!;
 
     return builder.build(
@@ -885,6 +900,19 @@ describe('VaapiPipelineBuilder pad', () => {
     expect(args).not.toContain('overlay_vaapi');
   });
 
+  function createGeneratedWatermarkStream() {
+    return VideoStream.create({
+      codec: 'generated',
+      colorFormat: ColorFormat.unknown,
+      displayAspectRatio: '50:3',
+      frameSize: FrameSize.withDimensions(1600, 96),
+      index: 0,
+      inputKind: 'filter',
+      pixelFormat: new PixelFormatRgba(),
+      providedSampleAspectRatio: '1:1',
+    });
+  }
+
   test('falls back to software overlay for multi-frame watermark inputs', () => {
     const pipeline = buildWithPad({
       videoStream: create43VideoStream(),
@@ -903,6 +931,64 @@ describe('VaapiPipelineBuilder pad', () => {
     const args = pipeline.getCommandArgs().join(' ');
     expect(args).toContain('hwdownload');
     expect(args).not.toContain('overlay_vaapi');
+  });
+
+  test('bounds a timed watermark input on the software overlay path', () => {
+    const pipeline = buildWithPad({
+      videoStream: create43VideoStream(),
+      binaryCapabilities: new FfmpegCapabilities(
+        new Set(),
+        new Map(),
+        new Set([KnownFfmpegFilters.PadVaapi]),
+        new Set(),
+      ),
+      watermarkSource: new FilterStreamSource(
+        'color=c=black@0.0:s=1600x96,format=rgba',
+      ),
+      watermarkStream: createGeneratedWatermarkStream(),
+      watermark: { duration: 5 },
+    });
+
+    const args = pipeline.getCommandArgs().join(' ');
+    // `enable` gates whether the overlay is drawn, not whether frames are
+    // pulled, so it cannot bound a generated input.
+    expect(args).toContain('trim=duration=5');
+    expect(args).toContain('eof_action=pass');
+    expect(args).not.toContain('enable=');
+  });
+
+  test('rebases a timed watermark onto a mid-program join', () => {
+    const pipeline = buildWithPad({
+      videoStream: create43VideoStream(),
+      watermarkSource: new FilterStreamSource(
+        'color=c=black@0.0:s=1600x96,format=rgba',
+      ),
+      watermarkStream: createGeneratedWatermarkStream(),
+      watermark: { duration: 5 },
+      subtitleStream: new EmbeddedSubtitleStream(
+        'subrip',
+        5,
+        SubtitleMethods.Burn,
+      ),
+      state: { start: dayjs.duration(835966) },
+    });
+
+    const args = pipeline.getCommandArgs().join(' ');
+    expect(args).toContain('-copyts');
+    expect(args).toContain('setpts=PTS-STARTPTS+835.966/TB');
+  });
+
+  test('leaves the watermark timeline alone when the stream starts at zero', () => {
+    const pipeline = buildWithPad({
+      videoStream: create43VideoStream(),
+      watermarkSource: new FilterStreamSource(
+        'color=c=black@0.0:s=1600x96,format=rgba',
+      ),
+      watermarkStream: createGeneratedWatermarkStream(),
+      watermark: { duration: 5 },
+    });
+
+    expect(pipeline.getCommandArgs().join(' ')).not.toContain('setpts=');
   });
 });
 

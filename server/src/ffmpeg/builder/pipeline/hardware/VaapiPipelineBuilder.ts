@@ -21,6 +21,7 @@ import { OverlayWatermarkFilter } from '@/ffmpeg/builder/filter/watermark/Overla
 import { WatermarkDurationFilter } from '@/ffmpeg/builder/filter/watermark/WatermarkDurationFilter.js';
 import { WatermarkOpacityFilter } from '@/ffmpeg/builder/filter/watermark/WatermarkOpacityFilter.js';
 import { WatermarkScaleFilter } from '@/ffmpeg/builder/filter/watermark/WatermarkScaleFilter.js';
+import { WatermarkTimelineOffsetFilter } from '@/ffmpeg/builder/filter/watermark/WatermarkTimelineOffsetFilter.js';
 import type { AudioInputSource } from '@/ffmpeg/builder/input/AudioInputSource.js';
 import type { ConcatInputSource } from '@/ffmpeg/builder/input/ConcatInputSource.js';
 import type { VideoInputSource } from '@/ffmpeg/builder/input/VideoInputSource.js';
@@ -618,6 +619,7 @@ export class VaapiPipelineBuilder extends SoftwarePipelineBuilder {
         watermarkInput.addOption(new DoNotIgnoreLoopInputOption());
       } else if (
         useHardwareOverlay ||
+        watermarkInput.watermark.duration > 0 ||
         isDefined(head(watermarkInput.watermark.fadeConfig))
       ) {
         // TODO: Needs hwaccel option here
@@ -646,10 +648,17 @@ export class VaapiPipelineBuilder extends SoftwarePipelineBuilder {
       ...this.getWatermarkFadeFilters(watermarkInput.watermark),
     );
 
-    if (useHardwareOverlay && watermarkInput.watermark.duration > 0) {
+    if (watermarkInput.watermark.duration > 0) {
       watermarkInput.filterSteps.push(
         new WatermarkDurationFilter(watermarkInput.watermark.duration),
       );
+
+      const startSeconds = this.videoStreamStartSeconds();
+      if (startSeconds > 0) {
+        watermarkInput.filterSteps.push(
+          new WatermarkTimelineOffsetFilter(startSeconds),
+        );
+      }
     }
 
     watermarkInput.filterSteps.push(
@@ -684,11 +693,24 @@ export class VaapiPipelineBuilder extends SoftwarePipelineBuilder {
             currentState.paddedSize,
           ),
           pf,
+          watermarkInput.watermark.duration > 0,
         ),
       );
     }
 
     return currentState;
+  }
+
+  /**
+   * The timestamp the main video stream starts at, which is zero unless
+   * `-copyts` is in play. Text subtitle burn-in is what turns it on.
+   */
+  protected videoStreamStartSeconds(): number {
+    if (!this.context.hasSubtitleTextContext()) {
+      return 0;
+    }
+
+    return (this.ffmpegState.start?.asMilliseconds() ?? 0) / 1000;
   }
 
   protected getIsIntelQsvOrVaapi(): boolean {
